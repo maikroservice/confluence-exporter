@@ -1,0 +1,28 @@
+{
+  "id": "12345",
+  "title": "My Test Page",
+  "status": "current",
+  "spaceId": "TESTSPACE",
+  "space": {
+    "key": "TESTSPACE",
+    "name": "Test Space"
+  },
+  "version": {
+    "number": 3,
+    "createdAt": "2024-01-15T10:00:00.000Z"
+  },
+  "body": {
+    "storage": {
+      "value": "<h1>Hello World</h1><p>This is a <strong>test</strong> page with <em>formatting</em>.</p><ul><li>Item one</li><li>Item two</li></ul>",
+      "representation": "storage"
+    },
+    "view": {
+      "value": "<h1>Hello World</h1><p>This is a <strong>test</strong> page with <em>formatting</em>.</p><ul><li>Item one</li><li>Item two</li></ul>",
+      "representation": "view"
+    }
+  },
+  "_links": {
+    "webui": "/wiki/spaces/TESTSPACE/pages/12345/My+Test+Page",
+    "self": "http://127.0.0.1:18080/wiki/api/v2/pages/12345"
+  }
+}

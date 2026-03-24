@@ -1,0 +1,11 @@
+{
+  "id": "12345",
+  "title": "My Test Page",
+  "status": "current",
+  "body": {
+    "view": {
+      "value": "<h1>Hello World</h1><p>This is a <strong>test</strong> page with <em>formatting</em>.</p><ul><li>Item one</li><li>Item two</li></ul>",
+      "representation": "view"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+# Credentials
+.confluencerc
+.env
+.env.local
+
+# Export output
+export/
+
+# Test artifacts
+/tmp/
+tests/tmp/
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc

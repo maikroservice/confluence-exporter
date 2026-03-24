@@ -1,0 +1,15 @@
+{
+  "results": [
+    {
+      "id": "98765",
+      "key": "TESTSPACE",
+      "name": "Test Space",
+      "type": "global",
+      "status": "current"
+    }
+  ],
+  "size": 1,
+  "limit": 1,
+  "start": 0,
+  "_links": {}
+}

@@ -1,0 +1,42 @@
+{
+  "id": "12345",
+  "type": "page",
+  "status": "current",
+  "title": "My Test Page",
+  "space": {
+    "id": 1,
+    "key": "TESTSPACE",
+    "name": "Test Space",
+    "type": "global"
+  },
+  "version": {
+    "by": {
+      "type": "known",
+      "username": "testuser",
+      "displayName": "Test User"
+    },
+    "when": "2024-01-15T10:00:00.000Z",
+    "number": 3
+  },
+  "ancestors": [
+    {
+      "id": "11111",
+      "type": "page",
+      "title": "Space Root Page"
+    }
+  ],
+  "body": {
+    "storage": {
+      "value": "<h1>Hello World</h1><p>This is a <strong>test</strong> page with <em>formatting</em>.</p><ul><li>Item one</li><li>Item two</li></ul>",
+      "representation": "storage"
+    },
+    "view": {
+      "value": "<h1>Hello World</h1><p>This is a <strong>test</strong> page with <em>formatting</em>.</p><ul><li>Item one</li><li>Item two</li></ul>",
+      "representation": "view"
+    }
+  },
+  "_links": {
+    "webui": "/display/TESTSPACE/My+Test+Page",
+    "self": "http://127.0.0.1:18080/rest/api/content/12345"
+  }
+}

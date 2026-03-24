@@ -1,0 +1,24 @@
+{
+  "results": [
+    {
+      "id": "44444",
+      "title": "Paginated Child One",
+      "status": "current",
+      "spaceId": "TESTSPACE",
+      "parentId": "12345"
+    },
+    {
+      "id": "44445",
+      "title": "Paginated Child Two",
+      "status": "current",
+      "spaceId": "TESTSPACE",
+      "parentId": "12345"
+    }
+  ],
+  "size": 2,
+  "limit": 2,
+  "start": 0,
+  "_links": {
+    "next": "/wiki/api/v2/pages/12345/children?limit=2&cursor=page2token"
+  }
+}
