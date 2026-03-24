@@ -1,43 +1,27 @@
 #!/usr/bin/env bash
 # lib/config.sh - Configuration loading
-# Precedence (highest to lowest): CLI flags > env vars > .confluencerc > defaults
+# Precedence (highest to lowest): CLI flags > env vars > .confluencerc > .env > defaults
 
 config_load() {
-  # Load .confluencerc from project dir or home dir (not both)
+  # Load in priority order (highest first). Each file only sets vars not already set,
+  # so earlier files win over later ones.
+
+  # 1. .confluencerc (project dir or home dir) — highest file-based priority
   local rc_file=""
   if [ -f "./.confluencerc" ]; then
     rc_file="./.confluencerc"
   elif [ -f "${HOME}/.confluencerc" ]; then
     rc_file="${HOME}/.confluencerc"
   fi
-
   if [ -n "$rc_file" ]; then
     log_debug "Loading config from $rc_file"
-    # Parse KEY=VALUE lines, skip comments and blank lines
-    while IFS='=' read -r key value; do
-      case "$key" in
-        \#*|"") continue ;;
-      esac
-      # Strip inline comments and surrounding whitespace/quotes from value
-      value=$(printf '%s' "$value" | sed 's/#.*//' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' | sed "s/^['\"]//;s/['\"]$//")
-      key=$(printf '%s' "$key" | sed 's/[[:space:]]//g')
-      # Only set if not already set by environment
-      eval "CONFLUENCE_RC_${key}=\"\${value}\""
-    done < "$rc_file"
+    _config_parse_file "$rc_file"
+  fi
 
-    # Apply rc values only if env vars not already set
-    _config_apply_rc CONFLUENCE_URL
-    _config_apply_rc CONFLUENCE_TYPE
-    _config_apply_rc CONFLUENCE_USERNAME
-    _config_apply_rc CONFLUENCE_EMAIL
-    _config_apply_rc CONFLUENCE_TOKEN
-    _config_apply_rc CONFLUENCE_PASSWORD
-    _config_apply_rc CONFLUENCE_AUTH_TYPE
-    _config_apply_rc CONFLUENCE_OUTPUT_DIR
-    _config_apply_rc CONFLUENCE_FORMAT
-    _config_apply_rc CONFLUENCE_DEBUG
-    _config_apply_rc CONFLUENCE_MAX_RETRIES
-    _config_apply_rc CONFLUENCE_RETRY_DELAY
+  # 2. .env (project dir only) — lowest file-based priority
+  if [ -f "./.env" ]; then
+    log_debug "Loading config from .env"
+    _config_parse_file "./.env"
   fi
 
   # Apply defaults for anything still unset
@@ -64,18 +48,36 @@ config_load() {
   log_debug "Config loaded: type=${CONFLUENCE_TYPE} format=${CONFLUENCE_FORMAT} output=${CONFLUENCE_OUTPUT_DIR}"
 }
 
-_config_apply_rc() {
-  local var="$1"
-  local rc_var="CONFLUENCE_RC_${var#CONFLUENCE_}"
-  # If the main var is unset and the rc var has a value, apply it
-  if [ -z "${!var:-}" ]; then
-    local rc_val
-    rc_val=$(eval "printf '%s' \"\${${rc_var}:-}\"")
-    if [ -n "$rc_val" ]; then
-      export "$var"="$rc_val"
+# Parse a KEY=VALUE file (supports comments, quoted values, inline comments).
+# Only processes CONFLUENCE_* keys. Does not overwrite vars already set in the environment.
+_config_parse_file() {
+  local file="$1"
+  local line key value
+  while IFS= read -r line; do
+    # Strip leading whitespace and skip blank lines and comments
+    line=$(printf '%s' "$line" | sed 's/^[[:space:]]*//')
+    case "$line" in
+      \#*|"") continue ;;
+    esac
+    # Split on first = only, preserving = signs in the value (e.g. base64 tokens)
+    key=${line%%=*}
+    value=${line#*=}
+    # Clean key: remove all whitespace
+    key=$(printf '%s' "$key" | sed 's/[[:space:]]//g')
+    # Only process CONFLUENCE_* keys
+    case "$key" in
+      CONFLUENCE_*) ;;
+      *) continue ;;
+    esac
+    # Clean value: strip inline comments, surrounding whitespace and quotes
+    value=$(printf '%s' "$value" | sed 's/[[:space:]]*#.*//' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' | sed "s/^['\"]//;s/['\"]$//")
+    # Only apply if the env var is not already set
+    if [ -z "${!key:-}" ]; then
+      export "$key"="$value"
     fi
-  fi
+  done < "$file"
 }
+
 
 config_require() {
   local var="$1"
