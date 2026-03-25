@@ -16,3 +16,6 @@ tests/tmp/
 # Python
 __pycache__/
 *.pyc
+
+# stuff
+memory/
