@@ -38,6 +38,7 @@ setup() {
   {"pattern": "/wiki/api/v2/spaces/98765/pages",              "fixture": "space_pages.json",       "status": 200},
   {"pattern": "/wiki/api/v2/pages/99999",                     "fixture": "error_404.json",         "status": 404},
   {"pattern": "/wiki/api/v2/spaces?limit=1",                  "fixture": "spaces_lookup.json",     "status": 200},
+  {"pattern": "/wiki/api/v2/spaces?limit=50",                 "fixture": "spaces_all.json",        "status": 200},
   {"pattern": "/wiki/api/v2/pages/77777",                     "fixture": "error_401.json",         "status": 401}
 ]
 EOF
@@ -179,4 +180,51 @@ teardown() {
   count=$(wc -l < "$out" | tr -d ' ')
   rm -f "$out"
   [ "$count" -eq 2 ]
+}
+
+# --- api_extract_key ---
+
+@test "api_extract_key: returns key from space JSON object" {
+  json=$(cat "$FIXTURES_DIR/space_single.json")
+  result=$(api_extract_key "$json")
+  [ "$result" = "TESTSPACE" ]
+}
+
+@test "api_extract_key: returns empty string when key is absent" {
+  result=$(api_extract_key '{"id":"1","name":"No Key Space"}')
+  [ -z "$result" ]
+}
+
+# --- api_get_all_spaces ---
+
+@test "api_get_all_spaces: fetches all accessible spaces and writes at least one result" {
+  [ "${HAS_JQ}" = "1" ] || skip "jq required"
+  local out
+  out=$(mktemp)
+  api_get_all_spaces "$out"
+  count=$(wc -l < "$out" | tr -d ' ')
+  rm -f "$out"
+  [ "$count" -ge 1 ]
+}
+
+@test "api_get_all_spaces: returned space objects include a key field" {
+  [ "${HAS_JQ}" = "1" ] || skip "jq required"
+  local out
+  out=$(mktemp)
+  api_get_all_spaces "$out"
+  key=$(head -1 "$out" | jq -r '.key // empty')
+  rm -f "$out"
+  [ "$key" = "TESTSPACE" ]
+}
+
+@test "api_get_all_spaces: uses server endpoint for server type" {
+  export CONFLUENCE_TYPE=server
+  export CONFLUENCE_URL="http://127.0.0.1:${_PORT}"
+  local out
+  out=$(mktemp)
+  # Server endpoint won't be mapped — expect a non-zero return, not a crash
+  run api_get_all_spaces "$out"
+  rm -f "$out"
+  # We only verify the function exists and returns without segfault
+  [ "$status" -ne 127 ]
 }

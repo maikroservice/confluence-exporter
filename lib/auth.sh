@@ -52,7 +52,7 @@ auth_test_connectivity() {
 
   log_debug "Testing connectivity: $test_url"
   local http_code
-  http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+  http_code=$(curl -s -L --max-redirs 10 -o /dev/null -w "%{http_code}" \
     -H "Authorization: ${auth_header}" \
     -H "Accept: application/json" \
     "${test_url}" 2>/dev/null)
@@ -61,6 +61,7 @@ auth_test_connectivity() {
     200) log_debug "Connectivity test passed (HTTP 200)"; return 0 ;;
     401|403) log_error "Authentication failed (HTTP ${http_code}). Check your credentials."; return 1 ;;
     000) log_error "Could not connect to ${base_url}. Check CONFLUENCE_URL."; return 2 ;;
+    3*) log_error "Unexpected redirect (HTTP ${http_code}). Check CONFLUENCE_URL — ensure it uses https:// and points directly to your Confluence instance (not a login/SSO page)."; return 2 ;;
     *) log_error "Unexpected HTTP ${http_code} from ${base_url}"; return 2 ;;
   esac
 }

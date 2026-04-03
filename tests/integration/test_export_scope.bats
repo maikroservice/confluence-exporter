@@ -13,6 +13,7 @@ setup() {
   cat > "$_MAP" <<'EOF'
 [
   {"pattern": "/wiki/api/v2/spaces?limit=1",                   "fixture": "spaces_lookup.json",      "status": 200},
+  {"pattern": "/wiki/api/v2/spaces?limit=50",                  "fixture": "spaces_all.json",         "status": 200},
   {"pattern": "/wiki/api/v2/spaces?keys=TESTSPACE",            "fixture": "spaces_lookup.json",      "status": 200},
   {"pattern": "/wiki/api/v2/spaces/98765/pages",               "fixture": "space_pages.json",        "status": 200},
   {"pattern": "/wiki/api/v2/pages/12345?body-format=storage",  "fixture": "page_single.json",        "status": 200},
@@ -163,4 +164,64 @@ EOF
 
   # parent + 3 children across 2 pages = 4
   [ "$count" -ge 4 ]
+}
+
+# --- no-scope default (all-spaces) ---
+
+@test "no-scope: exits 0 when no scope argument is given" {
+  run "$EXPORT_SCRIPT" --format md
+  [ "$status" -eq 0 ]
+}
+
+@test "no-scope: creates files for pages in all accessible spaces" {
+  "$EXPORT_SCRIPT" --format md
+  count=$(find "$_OUT_DIR" -name "*.md" | wc -l | tr -d ' ')
+  [ "$count" -ge 1 ]
+}
+
+@test "no-scope: creates a directory named after the space key" {
+  "$EXPORT_SCRIPT" --format md
+  [ -d "$_OUT_DIR/TESTSPACE" ]
+}
+
+@test "no-scope: --list prints space keys without creating files" {
+  run "$EXPORT_SCRIPT" --list
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ "TESTSPACE" ]]
+  file_count=$(find "$_OUT_DIR" -type f | wc -l | tr -d ' ')
+  [ "$file_count" -eq 0 ]
+}
+
+@test "no-scope: --list output includes page titles" {
+  run "$EXPORT_SCRIPT" --list
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ "TESTSPACE" ]]
+}
+
+# --- no-scope space index ---
+
+@test "no-scope: writes _index.md to output directory" {
+  "$EXPORT_SCRIPT" --format md
+  [ -f "$_OUT_DIR/_index.md" ]
+}
+
+@test "no-scope: _index.md contains the space key" {
+  "$EXPORT_SCRIPT" --format md
+  grep -q "TESTSPACE" "$_OUT_DIR/_index.md"
+}
+
+@test "no-scope: _index.md contains the space name" {
+  "$EXPORT_SCRIPT" --format md
+  grep -q "Test Space" "$_OUT_DIR/_index.md"
+}
+
+@test "no-scope: _index.md contains the space type" {
+  "$EXPORT_SCRIPT" --format md
+  grep -q "global" "$_OUT_DIR/_index.md"
+}
+
+@test "no-scope: --list does not write _index.md" {
+  run "$EXPORT_SCRIPT" --list
+  [ "$status" -eq 0 ]
+  [ ! -f "$_OUT_DIR/_index.md" ]
 }

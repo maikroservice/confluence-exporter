@@ -27,7 +27,7 @@ api_curl() {
 
   while [ "$attempt" -le "$max_retries" ]; do
     log_debug "curl attempt ${attempt}/${max_retries}: $url"
-    API_LAST_HTTP_CODE=$(curl -s -w "%{http_code}" -o "$tmp_body" \
+    API_LAST_HTTP_CODE=$(curl -s -L --max-redirs 10 -w "%{http_code}" -o "$tmp_body" \
       -H "Authorization: ${auth_header}" \
       -H "Accept: application/json" \
       -H "Content-Type: application/json" \
@@ -69,6 +69,13 @@ api_curl() {
         rm -f "$tmp_body"
         export API_LAST_HTTP_CODE
         log_error "Network error: could not connect to ${CONFLUENCE_URL}"
+        return 2
+        ;;
+      3[0-9][0-9])
+        rm -f "$tmp_body"
+        export API_LAST_HTTP_CODE
+        log_error "Unexpected redirect (HTTP ${API_LAST_HTTP_CODE}) for: $url"
+        log_error "Check CONFLUENCE_URL — ensure it uses https:// and points directly to your Confluence instance (not a login/SSO page)"
         return 2
         ;;
       *)
@@ -287,9 +294,9 @@ api_paginate_all() {
       else
         # Offset pagination (Server v1)
         local size limit start
-        size=$(printf '%s' "$response" | jq -r '.size // 0')
-        limit=$(printf '%s' "$response" | jq -r '.limit // 25')
-        start=$(printf '%s' "$response" | jq -r '.start // 0')
+        size=$(printf '%s' "$response" | jq -r '.size // 0' 2>/dev/null); size="${size:-0}"
+        limit=$(printf '%s' "$response" | jq -r '.limit // 25' 2>/dev/null); limit="${limit:-25}"
+        start=$(printf '%s' "$response" | jq -r '.start // 0' 2>/dev/null); start="${start:-0}"
         if [ "$size" -ge "$limit" ] 2>/dev/null; then
           local next_start=$((start + limit))
           if printf '%s' "$url" | grep -q 'start='; then
@@ -380,5 +387,29 @@ api_extract_space_key() {
   else
     printf '%s' "$json" | grep -o '"key":"[^"]*"' | head -1 \
       | sed 's/"key":"//;s/"//'
+  fi
+}
+
+# Extract the key field directly from a space JSON object
+api_extract_key() {
+  local json="$1"
+  if [ "${HAS_JQ:-0}" = "1" ]; then
+    printf '%s' "$json" | jq -r '.key // empty' 2>/dev/null
+  else
+    printf '%s' "$json" | grep -o '"key":"[^"]*"' | head -1 \
+      | sed 's/"key":"//;s/"//'
+  fi
+}
+
+# Fetch all accessible spaces; appends JSON objects (one per line) to out_file
+api_get_all_spaces() {
+  local out_file="$1"
+  local base
+  base=$(api_base_url)
+
+  if [ "${CONFLUENCE_TYPE:-cloud}" = "cloud" ]; then
+    api_paginate_all "${base}/spaces?limit=50" "$out_file"
+  else
+    api_paginate_all "${base}/space?limit=50" "$out_file"
   fi
 }

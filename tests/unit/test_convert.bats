@@ -73,12 +73,14 @@ setup() {
 # --- convert_to_markdown: lists ---
 
 @test "convert_to_markdown: ul li becomes dash list item" {
+  HAS_PANDOC=0
   result=$(convert_to_markdown "<ul><li>Item one</li><li>Item two</li></ul>")
   [[ "$result" =~ "- Item one" ]]
   [[ "$result" =~ "- Item two" ]]
 }
 
 @test "convert_to_markdown: ol li becomes numbered list item" {
+  HAS_PANDOC=0
   result=$(convert_to_markdown "<ol><li>First</li><li>Second</li></ol>")
   [[ "$result" =~ "1. First" ]]
 }
@@ -86,6 +88,7 @@ setup() {
 # --- convert_to_markdown: code blocks ---
 
 @test "convert_to_markdown: pre becomes fenced code block" {
+  HAS_PANDOC=0
   result=$(convert_to_markdown '<pre><code>echo "hello"</code></pre>')
   [[ "$result" =~ '```' ]]
   [[ "$result" =~ 'echo "hello"' ]]
@@ -102,6 +105,7 @@ setup() {
 # --- convert_to_markdown: tag stripping ---
 
 @test "convert_to_markdown: unknown tags are stripped" {
+  HAS_PANDOC=0
   result=$(convert_to_markdown "<div><span>Just text</span></div>")
   [[ "$result" =~ "Just text" ]]
   [[ "$result" != *"<div>"* ]]

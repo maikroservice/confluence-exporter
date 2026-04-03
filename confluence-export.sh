@@ -11,6 +11,29 @@ for _lib in log deps config auth api scraper convert output; do
 done
 
 # ---------------------------------------------------------------------------
+# Signal handling — clean up partial writes and report progress on interrupt
+# ---------------------------------------------------------------------------
+_PAGES_WRITTEN=0
+_INTERRUPTED=0
+
+_on_exit() {
+  # Remove any partial-write temp files left by output_write_file's atomic write
+  if [ -n "${CONFLUENCE_OUTPUT_DIR:-}" ] && [ -d "${CONFLUENCE_OUTPUT_DIR}" ]; then
+    find "${CONFLUENCE_OUTPUT_DIR}" -name '.tmp_*' -delete 2>/dev/null || true
+  fi
+  if [ "$_INTERRUPTED" = "1" ] && [ "${LIST_ONLY:-0}" != "1" ]; then
+    if [ "$_PAGES_WRITTEN" -gt 0 ]; then
+      log_info "Interrupted — ${_PAGES_WRITTEN} page(s) written to ${CONFLUENCE_OUTPUT_DIR}"
+    else
+      log_warn "Interrupted — no pages written yet (still fetching page list from API)"
+    fi
+  fi
+}
+
+trap '_INTERRUPTED=1; exit 130' INT TERM
+trap '_on_exit' EXIT
+
+# ---------------------------------------------------------------------------
 # Usage
 # ---------------------------------------------------------------------------
 usage() {
@@ -19,10 +42,11 @@ Usage: $(basename "$0") [OPTIONS]
 
 Export Confluence pages to Markdown, HTML, or raw storage XML.
 
-Scope (one required):
+Scope (optional — defaults to all accessible spaces):
   --page <url|id>        Export a single page
   --recursive <url|id>   Export a page and all its descendants
   --space <SPACE_KEY>    Export all pages in a space
+                         (no flag: export all spaces the token can access)
 
 Format:
   --format md|html|raw   Output format (default: md)
@@ -86,7 +110,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-[ -z "$SCOPE" ] && { log_error "One of --page, --recursive, or --space is required."; usage; }
+[ -z "$SCOPE" ] && SCOPE="all-spaces"
 
 # ---------------------------------------------------------------------------
 # Bootstrap
@@ -200,6 +224,7 @@ _export_page_api() {
   path=$(output_build_path "$CONFLUENCE_OUTPUT_DIR" "$space_key" "$parent_slug" "$slug" "$CONFLUENCE_FORMAT")
   path=$(output_collision_path "$path" "$page_id")
   output_write_file "$path" "$content"
+  _PAGES_WRITTEN=$((_PAGES_WRITTEN + 1))
   log_info "Exported: $title → $path"
 }
 
@@ -238,7 +263,50 @@ _export_page_scraper() {
   path=$(output_build_path "$CONFLUENCE_OUTPUT_DIR" "$space_key" "" "$slug" "$CONFLUENCE_FORMAT")
   path=$(output_collision_path "$path" "${page_id:-0}")
   output_write_file "$path" "$content"
+  _PAGES_WRITTEN=$((_PAGES_WRITTEN + 1))
   log_info "Scraped: $title → $path"
+}
+
+# ---------------------------------------------------------------------------
+# Write a space index file immediately after the space list is fetched
+# ---------------------------------------------------------------------------
+_write_spaces_index() {
+  local spaces_file="$1"
+  local index_path="${CONFLUENCE_OUTPUT_DIR}/_index.md"
+
+  mkdir -p "$CONFLUENCE_OUTPUT_DIR" || return 1
+
+  local date_str
+  date_str=$(date '+%Y-%m-%d %H:%M:%S')
+
+  {
+    printf '# Confluence Spaces\n\n'
+    printf '_Generated: %s_\n\n' "$date_str"
+    printf '| Space Key | Name | Type | Export Path |\n'
+    printf '|-----------|------|------|-------------|\n'
+
+    while IFS= read -r space_json; do
+      [ -z "$space_json" ] && continue
+      local skey sname stype
+      skey=$(api_extract_key "$space_json")
+      [ -z "$skey" ] || [ "$skey" = "null" ] && continue
+
+      if [ "${HAS_JQ:-0}" = "1" ]; then
+        sname=$(printf '%s' "$space_json" | jq -r '.name // ""' 2>/dev/null)
+        stype=$(printf '%s' "$space_json" | jq -r '.type // ""' 2>/dev/null)
+      else
+        sname=$(printf '%s' "$space_json" | grep -o '"name":"[^"]*"' | head -1 \
+          | sed 's/"name":"//;s/"$//')
+        stype=$(printf '%s' "$space_json" | grep -o '"type":"[^"]*"' | head -1 \
+          | sed 's/"type":"//;s/"$//')
+      fi
+
+      printf '| %s | %s | %s | ./%s/ |\n' \
+        "$skey" "${sname:-$skey}" "${stype:-}" "$skey"
+    done < "$spaces_file"
+  } > "$index_path"
+
+  log_info "Space index written to: $index_path"
 }
 
 # ---------------------------------------------------------------------------
@@ -277,6 +345,46 @@ _export_recursive() {
 # Main dispatch
 # ---------------------------------------------------------------------------
 case "$SCOPE" in
+
+  all-spaces)
+    log_info "No scope provided — checking all accessible Confluence spaces"
+    spaces_file=$(mktemp)
+    api_get_all_spaces "$spaces_file" || { rm -f "$spaces_file"; exit 1; }
+
+    [ "$LIST_ONLY" != "1" ] && _write_spaces_index "$spaces_file"
+
+    while IFS= read -r space_json; do
+      [ -z "$space_json" ] && continue
+      skey=$(api_extract_key "$space_json")
+      [ -z "$skey" ] || [ "$skey" = "null" ] && continue
+
+      if [ "$LIST_ONLY" = "1" ]; then
+        sname=""
+        if [ "${HAS_JQ:-0}" = "1" ]; then
+          sname=$(printf '%s' "$space_json" | jq -r '.name // empty' 2>/dev/null)
+        fi
+        printf '[%s] %s\n' "$skey" "${sname:-$skey}"
+      else
+        log_info "Exporting space: $skey"
+        pages_file=$(mktemp)
+        if ! api_get_space_pages "$skey" "$pages_file"; then
+          log_warn "Skipping space $skey (could not fetch pages)"
+          rm -f "$pages_file"
+          continue
+        fi
+
+        while IFS= read -r page_json; do
+          [ -z "$page_json" ] && continue
+          pid=$(api_extract_id "$page_json")
+          [ -z "$pid" ] || [ "$pid" = "null" ] && continue
+          _export_page_api "$pid" ""
+        done < "$pages_file"
+        rm -f "$pages_file"
+      fi
+    done < "$spaces_file"
+
+    rm -f "$spaces_file"
+    ;;
 
   page)
     if [ "$MODE" = "scraper" ]; then
